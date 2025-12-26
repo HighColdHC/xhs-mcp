@@ -1,0 +1,47 @@
+{
+  "next_id": 3,
+  "accounts": [
+    {
+      "id": 1,
+      "key": "acc_1",
+      "fingerprint": {
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.15 Safari/537.36",
+        "accept_language": "zh-CN,zh;q=0.9,en;q=0.6",
+        "platform": "MacIntel",
+        "timezone": "Asia/Shanghai",
+        "screen_width": 1920,
+        "screen_height": 1080,
+        "device_scale": 1.25,
+        "hardware_concurrency": 4,
+        "device_memory": 8,
+        "webgl_vendor": "Intel Inc.",
+        "webgl_renderer": "Intel(R) UHD Graphics"
+      },
+      "cookie_path": "accounts\\acc_1\\cookies.json",
+      "profile_path": "accounts\\acc_1\\profile",
+      "logged_in": true,
+      "last_login": "2025-12-20T22:19:13.77388+08:00"
+    },
+    {
+      "id": 2,
+      "key": "acc_2",
+      "fingerprint": {
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.177 Safari/537.36",
+        "accept_language": "zh-CN,zh;q=0.9,en;q=0.6",
+        "platform": "MacIntel",
+        "timezone": "Asia/Shanghai",
+        "screen_width": 1536,
+        "screen_height": 864,
+        "device_scale": 1,
+        "hardware_concurrency": 4,
+        "device_memory": 16,
+        "webgl_vendor": "Intel Inc.",
+        "webgl_renderer": "Intel(R) Iris(R) Plus Graphics 640"
+      },
+      "cookie_path": "accounts\\acc_2\\cookies.json",
+      "profile_path": "accounts\\acc_2\\profile",
+      "logged_in": true,
+      "last_login": "2025-12-20T22:30:52.97035+08:00"
+    }
+  ]
+}

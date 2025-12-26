@@ -1,0 +1,40 @@
+{
+  "name": "xhs-mcp-desktop",
+  "version": "0.1.0",
+  "description": "Desktop shell for xiaohongshu-mcp (Electron)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.xhs.mcp.desktop",
+    "productName": "XHS MCP Desktop Fix23",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/xhs-mcp-sched-fix23.exe",
+        "to": "backend/xhs-mcp.exe"
+      },
+      {
+        "from": "vendor/chromium/chrome-win64",
+        "to": "chromium/chrome-win64"
+      }
+    ],
+    "win": {
+      "target": "portable"
+    }
+  }
+}

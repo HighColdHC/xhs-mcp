@@ -1,0 +1,22 @@
+# builds & deps
+desktop/dist*/
+desktop/node_modules/
+desktop/vendor/chromium/
+backend/*.exe
+backend/data/
+
+# runtime data
+xhs-data/
+data/
+
+# logs
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store

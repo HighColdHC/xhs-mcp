@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>XHS MCP Desktop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="tabs">
+        <button id="tab-accounts" class="tab active">账号管理</button>
+        <button id="tab-logs" class="tab">运行日志</button>
+      </div>
+
+      <section id="panel-accounts" class="panel active">
+        <div class="actions">
+          <button id="btn-refresh">刷新列表</button>
+          <button id="btn-new">新增账号</button>
+          <button id="btn-raw-start">启动浏览器</button>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>账号ID</th>
+              <th>账号名称</th>
+              <th>代理信息</th>
+              <th>代理状态</th>
+              <th>登录状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="account-body"></tbody>
+        </table>
+
+        <div id="modal" class="modal hidden">
+          <div class="modal-content">
+            <h3 id="form-title">新增账号</h3>
+            <div class="form-row">
+              <label>账号ID</label>
+              <input id="form-id" disabled />
+            </div>
+            <div class="form-row">
+              <label>账号名称</label>
+              <input id="form-name" placeholder="备注名称（可选）" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="form-row">
+              <label>代理类型</label>
+              <select id="form-type">
+                <option value="direct">直连</option>
+                <option value="http">http</option>
+                <option value="https">https</option>
+                <option value="socks5">socks5</option>
+              </select>
+            </div>
+            <div id="proxy-fields">
+              <div class="form-row">
+                <label>代理 IP/域名</label>
+                <input id="form-host" placeholder="ip 或域名" />
+              </div>
+              <div class="form-row">
+                <label>端口</label>
+                <input id="form-port" placeholder="端口" />
+              </div>
+              <div class="form-row">
+                <label>用户名（可选）</label>
+                <input id="form-user" placeholder="代理用户名" />
+              </div>
+              <div class="form-row">
+                <label>密码（可选）</label>
+                <input id="form-pass" placeholder="代理密码" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="form-cancel" class="secondary">取消</button>
+              <button id="form-save" class="primary">保存</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-logs" class="panel">
+        <div class="actions">
+          <button id="btn-log-reload">刷新日志</button>
+          <button id="btn-backend-restart">重启后端</button>
+        </div>
+        <textarea id="log-box" readonly></textarea>
+      </section>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
