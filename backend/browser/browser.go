@@ -93,6 +93,11 @@ func New(cfg Config) (*Browser, error) {
 		Set(flags.NoSandbox).
 		Set(flags.Flag("no-first-run")).
 		Set(flags.Flag("no-default-browser-check")).
+		// 禁用 Chromium 的无关日志
+		Set(flags.Flag("disable-logging")).
+		Set(flags.Flag("disable-gpu-computing")).
+		Set(flags.Flag("disable-software-rasterizer")).
+		Set(flags.Flag("log-level"), "3").
 		Logger(os.Stdout)
 
 	if chromeVerbose {

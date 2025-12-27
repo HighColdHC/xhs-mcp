@@ -227,12 +227,36 @@ async function deleteAccount(id) {
   }
 }
 
+// 轮询指定账号的登录状态，直到登录完成或超时
+async function pollAccountLoginStatus(id, maxAttempts = 120, interval = 2000) {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const data = await fetchJSON(`${API_BASE}/api/v1/accounts`);
+      const account = (data.data || []).find(a => a.id === Number(id));
+      if (account && account.logged_in) {
+        return true; // 登录成功
+      }
+    } catch (e) {
+      // 忽略轮询中的错误，继续下次尝试
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  return false; // 超时未登录
+}
+
 async function startAccountWindow(id) {
   try {
     await fetchJSON(`${API_BASE}/api/v1/accounts/${id}/start`, {
       method: 'POST',
     });
-    alert('已启动该账号的浏览器窗口');
+    alert('已启动该账号的浏览器窗口，请在浏览器中扫码登录');
+
+    // 启动轮询监控登录状态
+    pollAccountLoginStatus(id).then(success => {
+      if (success) {
+        loadAccounts(); // 登录成功，刷新账号列表
+      }
+    });
   } catch (e) {
     alert('启动失败: ' + e.message);
   }

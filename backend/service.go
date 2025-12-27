@@ -234,6 +234,42 @@ func (s *XiaohongshuService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeRe
 	}, nil
 }
 
+// LoginAndWait 启动可视化登录并等待扫码完成，完成后保存 cookies 并关闭浏览器。
+func (s *XiaohongshuService) LoginAndWait(ctx context.Context, timeout time.Duration) error {
+	ctx = session.WithHeadless(ctx, false)
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	b, err := s.newBrowser(ctx)
+	if err != nil {
+		return err
+	}
+	page := b.NewPage()
+	defer func() {
+		_ = page.Close()
+		b.Close()
+	}()
+
+	if err := rod.Try(func() {
+		_ = page.MustNavigate("https://www.xiaohongshu.com/explore").MustWaitLoad()
+	}); err != nil {
+		return err
+	}
+
+	loginAction := xiaohongshu.NewLogin(page)
+	if !loginAction.WaitForLogin(ctx) {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("login cancelled")
+	}
+
+	return s.saveCookies(ctx, page)
+}
+
 // StartVisibleWindow 启动可视化窗口供人工操作
 func (s *XiaohongshuService) StartVisibleWindow(ctx context.Context) error {
 	accountKey := session.Account(ctx)
@@ -253,11 +289,21 @@ func (s *XiaohongshuService) StartVisibleWindow(ctx context.Context) error {
 	s.liveMu.Unlock()
 
 	go func() {
-		if err := page.Navigate("https://www.xiaohongshu.com"); err != nil {
+		if err := page.Navigate("https://www.xiaohongshu.com/explore"); err != nil {
 			logrus.Warnf("visible window navigate failed: %v", err)
 			return
 		}
 		_ = page.WaitLoad()
+
+		loginAction := xiaohongshu.NewLogin(page)
+		ctxTimeout, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if loginAction.WaitForLogin(ctxTimeout) {
+			ctxWithAccount := session.WithAccount(context.Background(), accountKey)
+			if err := s.saveCookies(ctxWithAccount, page); err != nil {
+				logrus.Warnf("save cookies after manual login failed: %v", err)
+			}
+		}
 	}()
 
 	logrus.Infof("started visible browser window for account %s", accountKey)

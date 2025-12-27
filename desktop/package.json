@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "com.xhs.mcp.desktop",
-    "productName": "XHS MCP Desktop Fix23",
+    "productName": "XHS MCP Desktop Fix26",
     "directories": {
       "output": "dist"
     },
@@ -25,7 +25,7 @@
     ],
     "extraResources": [
       {
-        "from": "../backend/xhs-mcp-sched-fix23.exe",
+        "from": "../backend/xhs-mcp-sched-fix26.exe",
         "to": "backend/xhs-mcp.exe"
       },
       {

@@ -77,7 +77,7 @@ function copyDirIfMissing(srcDir, destDir) {
 }
 
 function resolveDevBackendPath() {
-  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix23.exe');
+  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix26.exe');
 }
 
 function resolveDevChromiumDir() {
@@ -150,8 +150,8 @@ function startBackend() {
     ROD_BROWSER_BIN: chromePath,
     CHROME_PATH: chromePath,
     LOG_LEVEL: 'debug',
-    XHS_CHROME_VERBOSE: process.env.XHS_CHROME_VERBOSE || '1',
-    XHS_ROD_TRACE: process.env.XHS_ROD_TRACE || '1',
+    XHS_CHROME_VERBOSE: process.env.XHS_CHROME_VERBOSE || '0',
+    XHS_ROD_TRACE: process.env.XHS_ROD_TRACE || '0',
   };
 
   const args = ['--headless=true', '--port', BACKEND_PORT];

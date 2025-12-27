@@ -200,19 +200,17 @@ func (s *AppServer) startLoginHandler(c *gin.Context) {
 	}
 
 	ctx := session.WithAccount(c.Request.Context(), acc.Key)
-	ctx = session.WithHeadless(ctx, false) // 登录需要可见窗口
 	logrus.Infof("begin login flow for account=%s(id=%d)", acc.Key, acc.ID)
-	result, err := s.xiaohongshuService.GetLoginQrcode(ctx)
-	if err != nil {
-		respondError(c, http.StatusInternalServerError, "STATUS_CHECK_FAILED", "获取登录二维码失败", err.Error())
+	if err := s.xiaohongshuService.LoginAndWait(ctx, 10*time.Minute); err != nil {
+		_ = s.accounts.Delete(acc.ID)
+		respondError(c, http.StatusInternalServerError, "LOGIN_FAILED", "登录失败", err.Error())
 		return
 	}
 
 	respondSuccess(c, gin.H{
 		"account_id": acc.ID,
 		"proxy":      acc.Proxy,
-		"data":       result,
-	}, "生成登录二维码成功")
+	}, "登录成功")
 }
 
 // listAccountsHandler 列出账号信息
