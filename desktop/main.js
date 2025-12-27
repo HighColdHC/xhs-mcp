@@ -77,7 +77,7 @@ function copyDirIfMissing(srcDir, destDir) {
 }
 
 function resolveDevBackendPath() {
-  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix26.exe');
+  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix29.exe');
 }
 
 function resolveDevChromiumDir() {
@@ -217,9 +217,11 @@ function createWindow() {
 }
 
 function createTray() {
-  const iconPng =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABKUlEQVQ4T6WTvUoDQRSGv6G0sNQH0EAWEHqLQH0BCLYQ8u0b3m4q0BE3Q0a4VNoQWJqY0Y9k7uOZ2kXoJt2Ew8f5zPz7oPz7v2k4Sx8Q4B+1S4Qp5U4vT0pGzqv9mX8oK2G+6oQ2m0q5oGQ0x3G6c7mK0q8M2cOQ6rJ1tQp9lVtHc0PpWZ1uS3K1S2wR8e5xH0p9kF2hQxGZr+H2cQj1s8qE1wF7GqOQq2b0S1AqW9c0y2zGQk8q9sC2gEw1bFokA2Ff3x3j0jI8B1Lq7p3rW0kQbGkK7QqgXgP9wJ2c8j3l8gY8dCj3Tg+o0bVwQnD0p4xwcoz4b6RzE7+3z9w8YQm0o6j0JbK6s6U4JXy0xJ4mXyQ1o6t8g2oO0fJx1jL3W+M3sAAAAASUVORK5CYII=';
-  const icon = nativeImage.createFromDataURL(iconPng);
+  // 小红书风格的红色图标 - 16x16 PNG
+  const iconPath = path.join(__dirname, 'icon_16.png');
+  const icon = nativeImage.createFromPath(iconPath);
+  // 确保图标不会被缩放
+  icon.resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   const menu = Menu.buildFromTemplate([
     { label: 'Show', click: () => mainWindow.show() },

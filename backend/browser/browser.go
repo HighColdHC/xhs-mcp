@@ -184,7 +184,7 @@ func envEnabled(name string) bool {
 }
 
 func cleanupUserDataLocks(dir string) {
-	lockFiles := []string{"SingletonLock", "SingletonCookie", "SingletonSocket"}
+	lockFiles := []string{"SingletonLock", "SingletonCookie", "SingletonSocket", "DevToolsActivePort"}
 	for _, name := range lockFiles {
 		path := filepath.Join(dir, name)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -196,7 +196,9 @@ func cleanupUserDataLocks(dir string) {
 // Close closes the browser and cleans up the launcher.
 func (b *Browser) Close() {
 	if b.browser != nil {
-		b.browser.MustClose()
+		if err := b.browser.Close(); err != nil {
+			logrus.Debugf("browser close failed: %v", err)
+		}
 	}
 	if b.launcher != nil {
 		if b.cleanup {

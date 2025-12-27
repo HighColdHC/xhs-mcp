@@ -58,6 +58,17 @@ func (s *XiaohongshuService) setLiveBrowser(accountKey string, b *browser.Browse
 	s.liveByAccount[accountKey] = b
 }
 
+func (s *XiaohongshuService) clearLiveBrowser(accountKey string, b *browser.Browser) {
+	if accountKey == "" || b == nil {
+		return
+	}
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	if s.liveByAccount[accountKey] == b {
+		delete(s.liveByAccount, accountKey)
+	}
+}
+
 func (s *XiaohongshuService) getAccountBrowser(ctx context.Context) (*browser.Browser, func(), error) {
 	accountKey := session.Account(ctx)
 	if live := s.getLiveBrowser(accountKey); live != nil {
@@ -276,11 +287,30 @@ func (s *XiaohongshuService) StartVisibleWindow(ctx context.Context) error {
 	bg := session.WithAccount(context.Background(), accountKey)
 	bg = session.WithHeadless(bg, false)
 
+	if accountKey != "" {
+		if live := s.getLiveBrowser(accountKey); live != nil {
+			s.clearLiveBrowser(accountKey, live)
+			live.Close()
+		}
+	}
+
 	b, err := s.newBrowser(bg)
 	if err != nil {
 		return err
 	}
 	page := b.NewPage()
+	cleanupOnce := sync.Once{}
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			s.clearLiveBrowser(accountKey, b)
+			b.Close()
+		})
+	}
+	go func() {
+		for range page.Event() {
+		}
+		cleanup()
+	}()
 
 	// 保存引用防止被回收提前关闭
 	s.setLiveBrowser(accountKey, b)
