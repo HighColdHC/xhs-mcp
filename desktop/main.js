@@ -77,7 +77,7 @@ function copyDirIfMissing(srcDir, destDir) {
 }
 
 function resolveDevBackendPath() {
-  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix29.exe');
+  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix30.exe');
 }
 
 function resolveDevChromiumDir() {

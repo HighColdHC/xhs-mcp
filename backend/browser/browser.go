@@ -87,51 +87,103 @@ func New(cfg Config) (*Browser, error) {
 	traceEnabled := cfg.Trace || envEnabled("XHS_ROD_TRACE")
 	chromeVerbose := envEnabled("XHS_CHROME_VERBOSE")
 
-	l := launcher.New().Context(ctx).
-		Headless(cfg.Headless).
-		Leakless(false).
-		Set(flags.NoSandbox).
-		Set(flags.Flag("no-first-run")).
-		Set(flags.Flag("no-default-browser-check")).
-		// 禁用 Chromium 的无关日志
-		Set(flags.Flag("disable-logging")).
-		Set(flags.Flag("disable-gpu-computing")).
-		Set(flags.Flag("disable-software-rasterizer")).
-		Set(flags.Flag("log-level"), "3").
-		Logger(os.Stdout)
+	makeLauncher := func() *launcher.Launcher {
+		l := launcher.New().Context(ctx).
+			Headless(cfg.Headless).
+			Leakless(true).
+			Set(flags.NoSandbox).
+			Set(flags.Flag("no-first-run")).
+			Set(flags.Flag("no-default-browser-check")).
+			Logger(os.Stdout)
 
-	if chromeVerbose {
-		l = l.Set(flags.Flag("enable-logging"), "stderr").
-			Set(flags.Flag("v"), "1")
-		logrus.Info("chrome verbose logging enabled")
+		if chromeVerbose {
+			l = l.Set(flags.Flag("enable-logging"), "stderr").
+				Set(flags.Flag("v"), "1")
+			logrus.Info("chrome verbose logging enabled")
+		}
+
+		if proxyForChrome != "" {
+			l = l.Proxy(proxyForChrome)
+		}
+		if cfg.UserDataDir != "" {
+			l = l.UserDataDir(cfg.UserDataDir)
+		}
+		if cfg.BinPath != "" {
+			l = l.Bin(cfg.BinPath)
+		}
+		if cfg.UserAgent != "" {
+			l = l.Set(flags.Flag("user-agent"), cfg.UserAgent)
+		}
+		if cfg.Fingerprint != nil && cfg.Fingerprint.AcceptLanguage != "" {
+			l = l.Set(flags.Flag("lang"), strings.Split(cfg.Fingerprint.AcceptLanguage, ",")[0])
+		}
+
+		return l
 	}
 
-	if proxyForChrome != "" {
-		l = l.Proxy(proxyForChrome)
-	}
-	if cfg.UserDataDir != "" {
-		l = l.UserDataDir(cfg.UserDataDir)
-	}
-	if cfg.BinPath != "" {
-		l = l.Bin(cfg.BinPath)
-	}
-	if cfg.UserAgent != "" {
-		l = l.Set(flags.Flag("user-agent"), cfg.UserAgent)
-	}
-	if cfg.Fingerprint != nil && cfg.Fingerprint.AcceptLanguage != "" {
-		l = l.Set(flags.Flag("lang"), strings.Split(cfg.Fingerprint.AcceptLanguage, ",")[0])
+	cleanupLauncher := func(l *launcher.Launcher) {
+		if l == nil {
+			return
+		}
+		if cfg.UserDataDir == "" {
+			l.Cleanup()
+		} else {
+			l.Kill()
+		}
+		if cfg.UserDataDir != "" {
+			cleanupUserDataLocks(cfg.UserDataDir)
+		}
 	}
 
-	logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome)
-	logrus.Infof("browser launch args: %s", strings.Join(l.FormatArgs(), " "))
-	logrus.Info("browser launch: starting Chromium process")
+	var (
+		l          *launcher.Launcher
+		controlURL string
+		err        error
+	)
+	for attempt := 1; attempt <= 2; attempt++ {
+		l = makeLauncher()
+		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome)
+		logrus.Infof("browser launch args: %s", strings.Join(l.FormatArgs(), " "))
 
-	controlURL, err := l.Launch()
-	if err != nil {
+		// 检查 UserDataDir 是否存在且有锁文件
+		if cfg.UserDataDir != "" {
+			lockFiles := []string{"SingletonLock", "SingletonCookie", "SingletonSocket", "DevToolsActivePort"}
+			for _, name := range lockFiles {
+				path := filepath.Join(cfg.UserDataDir, name)
+				if _, err := os.Stat(path); err == nil {
+					logrus.Warnf("browser launch: lock file exists: %s", path)
+				}
+			}
+		}
+
+		if attempt > 1 {
+			logrus.Info("browser launch: retrying after previous failure")
+		}
+		logrus.Info("browser launch: starting Chromium process")
+
+		controlURL, err = l.Launch()
+		if err == nil {
+			logrus.Infof("browser launch: success, control url=%s", controlURL)
+			break
+		}
 		logrus.Errorf("browser launch failed: %v", err)
+
+		// 检查 Chrome 进程是否启动
+		if cfg.BinPath != "" {
+			logrus.Infof("browser launch: checking if Chrome process is running...")
+			// 这里的检查可能需要额外的工具函数
+		}
+
+		cleanupLauncher(l)
+		if attempt < 2 {
+			logrus.Infof("browser launch: waiting 500ms before retry...")
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	if err != nil {
+		logrus.Errorf("browser launch: all attempts failed, final error: %v", err)
 		return nil, err
 	}
-	logrus.Infof("browser launch: control url=%s", controlURL)
 
 	rb := rod.New().
 		ControlURL(controlURL).
@@ -184,13 +236,21 @@ func envEnabled(name string) bool {
 }
 
 func cleanupUserDataLocks(dir string) {
+	logrus.Infof("cleanupUserDataLocks: cleaning dir=%s", dir)
 	lockFiles := []string{"SingletonLock", "SingletonCookie", "SingletonSocket", "DevToolsActivePort"}
+	cleaned := 0
 	for _, name := range lockFiles {
 		path := filepath.Join(dir, name)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			logrus.Debugf("cleanup user data lock failed: %s %v", path, err)
+			logrus.Debugf("cleanupUserDataLocks: failed to remove %s: %v", path, err)
+		} else if os.IsNotExist(err) {
+			logrus.Debugf("cleanupUserDataLocks: %s does not exist", path)
+		} else {
+			logrus.Infof("cleanupUserDataLocks: removed %s", path)
+			cleaned++
 		}
 	}
+	logrus.Infof("cleanupUserDataLocks: cleaned %d lock files", cleaned)
 }
 
 // Close closes the browser and cleans up the launcher.
