@@ -140,6 +140,17 @@ func New(cfg Config) (*Browser, error) {
 		controlURL string
 		err        error
 	)
+
+	// cleanupNeeded 标记是否需要在失败时清理 launcher
+	// 只有成功创建并返回 Browser 时才设为 false
+	cleanupNeeded := true
+	defer func() {
+		if cleanupNeeded && l != nil {
+			logrus.Infof("browser launch failed, cleaning up launcher")
+			cleanupLauncher(l)
+		}
+	}()
+
 	for attempt := 1; attempt <= 2; attempt++ {
 		l = makeLauncher()
 		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome)
@@ -174,7 +185,7 @@ func New(cfg Config) (*Browser, error) {
 			// 这里的检查可能需要额外的工具函数
 		}
 
-		cleanupLauncher(l)
+		// cleanupLauncher 会在 defer 中统一调用
 		if attempt < 2 {
 			logrus.Infof("browser launch: waiting 500ms before retry...")
 			time.Sleep(500 * time.Millisecond)
@@ -212,6 +223,10 @@ func New(cfg Config) (*Browser, error) {
 			logrus.Debugf("no cookies loaded from %s: %v", cfg.CookiePath, err)
 		}
 	}
+
+	// 成功创建浏览器，标记不需要清理
+	// 后续由 Browser.Close() 负责清理 launcher
+	cleanupNeeded = false
 
 	return &Browser{
 		browser:  rb,
