@@ -58,6 +58,17 @@ func New(cfg Config) (*Browser, error) {
 		ctx = context.Background()
 	}
 
+	// 添加默认超时控制（30秒）
+	// 防止 Chrome 启动时因代理不可用等原因无限期阻塞
+	if _, hasTimeout := ctx.Deadline(); !hasTimeout {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		logrus.Infof("browser launch: using default 30s timeout")
+	} else {
+		logrus.Infof("browser launch: using custom context timeout")
+	}
+
 	if cfg.UserDataDir != "" {
 		if err := os.MkdirAll(cfg.UserDataDir, 0o755); err != nil {
 			logrus.Warnf("failed to create user data dir: %s %v", cfg.UserDataDir, err)
