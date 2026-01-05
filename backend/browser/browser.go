@@ -58,15 +58,17 @@ func New(cfg Config) (*Browser, error) {
 		ctx = context.Background()
 	}
 
-	// 添加默认超时控制（30秒）
-	// 防止 Chrome 启动时因代理不可用等原因无限期阻塞
+	// 基础上下文超时设置（如果没有设置）
+	var baseCancel context.CancelFunc
 	if _, hasTimeout := ctx.Deadline(); !hasTimeout {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
+		ctx, baseCancel = context.WithTimeout(ctx, 30*time.Second)
 		logrus.Infof("browser launch: using default 30s timeout")
 	} else {
 		logrus.Infof("browser launch: using custom context timeout")
+	}
+	// 延迟取消基础 context（在整个函数结束时）
+	if baseCancel != nil {
+		defer baseCancel()
 	}
 
 	if cfg.UserDataDir != "" {
@@ -101,8 +103,9 @@ func New(cfg Config) (*Browser, error) {
 	traceEnabled := cfg.Trace || envEnabled("XHS_ROD_TRACE")
 	chromeVerbose := envEnabled("XHS_CHROME_VERBOSE")
 
-	makeLauncher := func() *launcher.Launcher {
-		l := launcher.New().Context(ctx).
+	// 创建带特定 context 的 launcher 的辅助函数
+	makeLauncherWithContext := func(launchCtx context.Context) *launcher.Launcher {
+		l := launcher.New().Context(launchCtx).
 			Headless(cfg.Headless).
 			Leakless(true).
 			Set(flags.NoSandbox).
@@ -135,6 +138,7 @@ func New(cfg Config) (*Browser, error) {
 		return l
 	}
 
+
 	cleanupLauncher := func(l *launcher.Launcher) {
 		if l == nil {
 			return
@@ -166,8 +170,13 @@ func New(cfg Config) (*Browser, error) {
 	}()
 
 	for attempt := 1; attempt <= 2; attempt++ {
-		l = makeLauncher()
-		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome)
+		// ✅ 为每次重试创建独立的 context
+		retryCtx, retryCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer retryCancel() // ✅ 立即取消，不等待函数结束
+
+		// 使用新的 context 创建 launcher
+		l = makeLauncherWithContext(retryCtx)
+		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q (attempt %d)", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome, attempt)
 		logrus.Infof("browser launch args: %s", strings.Join(l.FormatArgs(), " "))
 
 		// 启动前强制清理锁文件
@@ -178,22 +187,26 @@ func New(cfg Config) (*Browser, error) {
 		if attempt > 1 {
 			logrus.Info("browser launch: retrying after previous failure")
 		}
-		logrus.Info("browser launch: starting Chromium process")
+		logrus.Infof("browser launch: starting Chromium process (attempt %d)", attempt)
 
 		controlURL, err = l.Launch()
-		if err == nil {
+
+		// ✅ 立即取消 context
+		retryCancel()
+
+		// 检查结果
+		if err != nil {
+			logrus.Errorf("browser launch failed (attempt %d): %v", attempt, err)
+			// 记录 context 错误详情
+			if retryCtx.Err() != nil {
+				logrus.Errorf("browser launch: context error on attempt %d: %v", attempt, retryCtx.Err())
+			}
+		} else {
 			logrus.Infof("browser launch: success, control url=%s", controlURL)
 			break
 		}
-		logrus.Errorf("browser launch failed: %v", err)
 
-		// 检查 Chrome 进程是否启动
-		if cfg.BinPath != "" {
-			logrus.Infof("browser launch: checking if Chrome process is running...")
-			// 这里的检查可能需要额外的工具函数
-		}
-
-		// cleanupLauncher 会在 defer 中统一调用
+		// 等待后重试
 		if attempt < 2 {
 			logrus.Infof("browser launch: waiting 500ms before retry...")
 			time.Sleep(500 * time.Millisecond)
