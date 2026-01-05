@@ -38,6 +38,9 @@ func setupRoutes(appServer *AppServer) *gin.Engine {
 	// API 路由组
 	api := router.Group("/api/v1")
 	{
+		// 健康检查
+		api.GET("/health", appServer.handleHealthCheck)
+
 		// 授权相关接口（无需授权验证）
 		appServer.registerLicenseRoutes(api)
 		api.POST("/login/start", appServer.startLoginHandler)

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -38,6 +40,12 @@ func NewAppServer(xiaohongshuService *XiaohongshuService) *AppServer {
 
 // Start 启动服务器
 func (s *AppServer) Start(port string) error {
+	// 检查端口是否可用
+	if err := checkPortAvailable(port); err != nil {
+		logrus.Errorf("端口检查失败: %v", err)
+		return fmt.Errorf("端口 %s 不可用: %w", port, err)
+	}
+
 	s.router = setupRoutes(s)
 
 	s.httpServer = &http.Server{
@@ -70,5 +78,16 @@ func (s *AppServer) Start(port string) error {
 		logrus.Infof("服务器已优雅关闭")
 	}
 
+	return nil
+}
+
+// checkPortAvailable 检查端口是否可用
+func checkPortAvailable(port string) error {
+	// 尝试监听端口
+	ln, err := net.Listen("tcp", port)
+	if err != nil {
+		return fmt.Errorf("端口被占用或无法绑定: %w", err)
+	}
+	ln.Close()
 	return nil
 }

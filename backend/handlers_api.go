@@ -671,3 +671,16 @@ func (s *AppServer) myProfileHandler(c *gin.Context) {
 
 	respondSuccess(c, map[string]any{"account_id": acc.ID, "data": result}, "获取我的主页成功")
 }
+
+// handleHealthCheck 健康检查端点
+func (s *AppServer) handleHealthCheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"status":    "healthy",
+			"service":   "xiaohongshu-mcp",
+			"timestamp": time.Now().Unix(),
+		},
+		"message": "服务正常",
+	})
+}

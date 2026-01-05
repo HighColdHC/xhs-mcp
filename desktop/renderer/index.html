@@ -6,6 +6,16 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- 后端状态提示层 -->
+    <div id="backend-status-overlay" class="backend-status-overlay hidden">
+      <div class="backend-status-content">
+        <div class="error-icon">⚠️</div>
+        <h3>后端服务连接失败</h3>
+        <p id="backend-status-text">后端服务未响应</p>
+        <button id="btn-retry-backend" class="primary">重试</button>
+      </div>
+    </div>
+
     <!-- 激活界面 -->
     <div id="license-panel" class="license-panel hidden">
       <div class="license-content">

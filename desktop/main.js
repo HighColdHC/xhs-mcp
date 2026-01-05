@@ -142,6 +142,28 @@ function startBackend() {
     return;
   }
 
+  // 检查是否有旧的后端进程在运行
+  const { exec } = require('child_process');
+  exec('tasklist | findstr "xhs-mcp.exe"', (err, stdout) => {
+    if (stdout && stdout.includes('xhs-mcp.exe')) {
+      appendLog('[DESKTOP] detected existing backend process, cleaning up...');
+      exec('taskkill /F /IM xhs-mcp.exe', (killErr) => {
+        if (killErr) {
+          appendLog(`[DESKTOP] cleanup failed: ${killErr.message}`);
+        } else {
+          appendLog('[DESKTOP] old backend process killed');
+          // 等待 1 秒后启动新进程
+          setTimeout(() => doStartBackend(backendPath, chromePath), 1000);
+        }
+      });
+    } else {
+      doStartBackend(backendPath, chromePath);
+    }
+  });
+}
+
+function doStartBackend(backendPath, chromePath) {
+
   const env = {
     ...process.env,
     ACCOUNTS_STORE: path.join(runtimeConfig.dataDir, 'accounts.json'),
@@ -163,6 +185,7 @@ function startBackend() {
   appendLog(`[DESKTOP] dataDir: ${runtimeConfig.dataDir}`);
   appendLog(`[DESKTOP] backend exe: ${backendPath}`);
   appendLog(`[DESKTOP] chromium: ${chromePath}`);
+  appendLog(`[DESKTOP] starting backend process...`);
 
   backendProc = spawn(backendPath, args, {
     cwd: runtimeConfig.baseDir,
@@ -190,7 +213,31 @@ function startBackend() {
 function stopBackend() {
   if (backendProc) {
     try {
+      appendLog('[DESKTOP] stopping backend...');
       backendProc.kill();
+
+      // 等待进程退出，最多 3 秒
+      let exited = false;
+      const timeout = setTimeout(() => {
+        if (!exited && backendProc) {
+          appendLog('[DESKTOP] backend did not exit gracefully, forcing kill...');
+          // Windows 下使用 taskkill 强制杀死
+          const { exec } = require('child_process');
+          exec(`taskkill /F /PID ${backendProc.pid}`, (err) => {
+            if (err) {
+              appendLog(`[DESKTOP] taskkill failed: ${err.message}`);
+            } else {
+              appendLog('[DESKTOP] backend process killed');
+            }
+          });
+        }
+      }, 3000);
+
+      backendProc.once('exit', () => {
+        exited = true;
+        clearTimeout(timeout);
+        appendLog('[DESKTOP] backend exited cleanly');
+      });
     } catch (err) {
       appendLog(`[DESKTOP] backend kill failed: ${err.message}`);
     }

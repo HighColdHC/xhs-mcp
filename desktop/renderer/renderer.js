@@ -41,7 +41,13 @@ const btnLogReload = document.getElementById('btn-log-reload');
 const btnBackendRestart = document.getElementById('btn-backend-restart');
 const logBox = document.getElementById('log-box');
 
+// 后端状态相关
+const backendStatusOverlay = document.getElementById('backend-status-overlay');
+const backendStatusText = document.getElementById('backend-status-text');
+const btnRetryBackend = document.getElementById('btn-retry-backend');
+
 let editingId = null;
+let backendHealthCheckInterval = null;
 
 function switchTab(tab) {
   if (tab === 'accounts') {
@@ -64,6 +70,52 @@ async function fetchJSON(url, opts) {
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
+}
+
+// 检查后端健康状态
+async function checkBackendHealth(timeout = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/health`, {
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.success && data.data?.status === 'healthy';
+  } catch (e) {
+    clearTimeout(timer);
+    return false;
+  }
+}
+
+// 显示后端连接失败提示
+function showBackendError(message = '后端服务未响应') {
+  if (backendStatusOverlay) {
+    backendStatusText.textContent = message;
+    backendStatusOverlay.classList.remove('hidden');
+  }
+}
+
+// 隐藏后端连接失败提示
+function hideBackendError() {
+  if (backendStatusOverlay) {
+    backendStatusOverlay.classList.add('hidden');
+  }
+}
+
+// 等待后端就绪
+async function waitForBackend(timeout = 10000) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    if (await checkBackendHealth(1000)) {
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return false;
 }
 
 async function loadAccounts() {
@@ -416,6 +468,29 @@ btnEnter.onclick = enterMain;
 
 // 初始化：始终显示激活界面
 async function initLicense() {
+  // 先检查后端是否就绪
+  hideBackendError();
+  const backendReady = await waitForBackend(10000);
+  if (!backendReady) {
+    showBackendError('后端服务启动失败，请点击"重试"按钮重新启动');
+    if (btnRetryBackend) {
+      btnRetryBackend.onclick = async () => {
+        btnRetryBackend.disabled = true;
+        btnRetryBackend.textContent = '正在重试...';
+        const success = await waitForBackend(10000);
+        if (success) {
+          hideBackendError();
+          initLicense();
+        } else {
+          showBackendError('后端服务仍然无响应，请重启应用');
+          btnRetryBackend.textContent = '重试';
+          btnRetryBackend.disabled = false;
+        }
+      };
+    }
+    return;
+  }
+
   const status = await checkLicense();
   // 始终显示激活界面，已激活时回显卡密
   await showLicensePanel(status.licensed ? status.key : '');

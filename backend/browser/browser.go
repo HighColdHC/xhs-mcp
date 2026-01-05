@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -46,6 +48,7 @@ type Browser struct {
 	fp       *session.Fingerprint
 	bridge   func()
 	cleanup  bool
+	pid      int // Chrome 进程 PID（用于强制清理）
 }
 
 // New launches a new rod browser with the provided configuration.
@@ -156,15 +159,9 @@ func New(cfg Config) (*Browser, error) {
 		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome)
 		logrus.Infof("browser launch args: %s", strings.Join(l.FormatArgs(), " "))
 
-		// 检查 UserDataDir 是否存在且有锁文件
+		// 启动前强制清理锁文件
 		if cfg.UserDataDir != "" {
-			lockFiles := []string{"SingletonLock", "SingletonCookie", "SingletonSocket", "DevToolsActivePort"}
-			for _, name := range lockFiles {
-				path := filepath.Join(cfg.UserDataDir, name)
-				if _, err := os.Stat(path); err == nil {
-					logrus.Warnf("browser launch: lock file exists: %s", path)
-				}
-			}
+			cleanupUserDataLocks(cfg.UserDataDir)
 		}
 
 		if attempt > 1 {
@@ -228,13 +225,54 @@ func New(cfg Config) (*Browser, error) {
 	// 后续由 Browser.Close() 负责清理 launcher
 	cleanupNeeded = false
 
+	// 尝试获取 Chrome 进程 PID（用于后续强制清理）
+	pid := getChromePID(cfg.BinPath)
+
 	return &Browser{
 		browser:  rb,
 		launcher: l,
 		fp:       cfg.Fingerprint,
 		bridge:   bridgeStop,
 		cleanup:  cfg.UserDataDir == "",
+		pid:      pid,
 	}, nil
+}
+
+// getChromePID 尝试获取 Chrome 进程的 PID
+func getChromePID(binPath string) int {
+	if binPath == "" {
+		return 0
+	}
+
+	// Windows 下使用 tasklist 获取 Chrome 进程 PID
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq chrome.exe", "/FO", "CSV")
+		output, err := cmd.Output()
+		if err != nil {
+			return 0
+		}
+
+		lines := strings.Split(string(output), "\n")
+		if len(lines) > 1 {
+			// 跳过标题行，取第一个 Chrome 进程
+			for _, line := range lines[1:] {
+				if line == "" {
+					continue
+				}
+				// CSV 格式: "chrome.exe","12345","Console","1","150,000 K"
+				parts := strings.Split(line, ",")
+				if len(parts) > 1 {
+					pidStr := strings.Trim(parts[1], "\"")
+					var pid int
+					if _, err := fmt.Sscanf(pidStr, "%d", &pid); err == nil {
+						return pid
+					}
+				}
+			}
+		}
+	}
+
+	return 0
 }
 
 func envEnabled(name string) bool {
@@ -292,6 +330,21 @@ func (b *Browser) Close() {
 		case <-done:
 		case <-time.After(2 * time.Second):
 		}
+	}
+
+	// 强制清理残留的 Chrome 进程（Windows）
+	if b.pid > 0 && runtime.GOOS == "windows" {
+		forceKillChrome(b.pid)
+	}
+}
+
+// forceKillChrome 强制杀死 Chrome 进程及其子进程
+func forceKillChrome(pid int) {
+	cmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", pid))
+	if err := cmd.Run(); err != nil {
+		logrus.Debugf("forceKillChrome: failed to kill PID %d: %v", pid, err)
+	} else {
+		logrus.Infof("forceKillChrome: killed Chrome process PID %d", pid)
 	}
 }
 
