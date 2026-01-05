@@ -1,0 +1,38 @@
+# macOS 交叉编译环境 (使用 osxcross)
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装基础工具
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    unzip \
+    xz-utils \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Go
+ENV GO_VERSION=1.21.5
+RUN curl -L https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -o go.tar.gz \
+    && tar -C /usr/local -xzf go.tar.gz \
+    && rm go.tar.gz
+
+ENV PATH=/usr/local/go/bin:${PATH}
+ENV GOPATH=/go
+
+# 安装 Node.js
+ENV NODE_VERSION=18.17.0
+RUN curl -L https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz -o node.tar.gz \
+    && tar -C /usr/local -xzf node.tar.gz \
+    && rm node.tar.gz
+
+ENV PATH=/usr/local/node-v${NODE_VERSION}-linux-x64/bin:${PATH}
+
+# 安装 osxcross (用于 macOS 交叉编译)
+# 注意：这需要从合法的 macOS SDK 获取，这里提供框架
+# 实际使用需要 macOS SDK 文件
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]

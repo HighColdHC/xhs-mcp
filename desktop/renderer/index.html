@@ -6,7 +6,36 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="container">
+    <!-- 激活界面 -->
+    <div id="license-panel" class="license-panel hidden">
+      <div class="license-content">
+        <h2>软件激活</h2>
+        <p class="license-desc">请输入卡密激活软件</p>
+        <div class="form-row">
+          <label>卡密</label>
+          <input id="license-key" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="form-row">
+          <label>机器码</label>
+          <input id="machine-id" type="text" readonly />
+        </div>
+        <div class="license-actions">
+          <button id="btn-activate" class="primary">激活</button>
+          <button id="btn-enter" class="secondary hidden">进入系统</button>
+        </div>
+        <p id="license-msg" class="license-msg"></p>
+      </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="main-container" class="container hidden">
+      <!-- 授权信息栏 -->
+      <div class="license-info-bar">
+        <span class="license-info-item">卡密: <strong id="info-key">-</strong></span>
+        <span class="license-info-item">机器码: <strong id="info-machine">-</strong></span>
+        <span class="license-info-item">过期: <strong id="info-expire">-</strong></span>
+      </div>
+
       <div class="tabs">
         <button id="tab-accounts" class="tab active">账号管理</button>
         <button id="tab-logs" class="tab">运行日志</button>

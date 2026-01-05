@@ -80,6 +80,9 @@ func main() {
 		profileBase = "accounts"
 	}
 
+	// 初始化授权管理器（使用 profileBase 作为数据目录）
+	initLicenseManager(profileBase)
+
 	accountManager, err := accounts.NewManager(storePath, profileBase)
 	if err != nil {
 		logrus.Fatalf("failed to init account manager: %v", err)

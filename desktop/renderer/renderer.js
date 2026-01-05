@@ -1,5 +1,19 @@
 const API_BASE = 'http://127.0.0.1:18060';
 
+// 激活相关元素
+const licensePanel = document.getElementById('license-panel');
+const mainContainer = document.getElementById('main-container');
+const licenseKeyInput = document.getElementById('license-key');
+const machineIdInput = document.getElementById('machine-id');
+const btnActivate = document.getElementById('btn-activate');
+const btnEnter = document.getElementById('btn-enter');
+const licenseMsg = document.getElementById('license-msg');
+
+// 授权信息展示元素
+const infoKey = document.getElementById('info-key');
+const infoMachine = document.getElementById('info-machine');
+const infoExpire = document.getElementById('info-expire');
+
 const tabAccounts = document.getElementById('tab-accounts');
 const tabLogs = document.getElementById('tab-logs');
 const panelAccounts = document.getElementById('panel-accounts');
@@ -280,7 +294,146 @@ btnBackendRestart.onclick = async () => {
   await window.electronAPI.restartBackend();
 };
 
+// ==================== 激活相关逻辑 ====================
+
+// 检查授权状态
+async function checkLicense() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/license/status`);
+    const data = await res.json();
+    if (data.success && data.data) {
+      return data.data;
+    }
+    return { licensed: false };
+  } catch (e) {
+    console.error('检查授权失败:', e);
+    return { licensed: false };
+  }
+}
+
+// 获取机器码
+async function getMachineID() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/license/machine-id`);
+    const text = await res.text();
+    console.log('机器码响应:', text);
+    const data = JSON.parse(text);
+    if (data.success && data.data && data.data.machine_id) {
+      return data.data.machine_id;
+    }
+    if (data.message) {
+      return '错误: ' + data.message;
+    }
+  } catch (e) {
+    console.error('获取机器码失败:', e);
+  }
+  return '获取失败';
+}
+
+// 显示激活界面
+async function showLicensePanel(existingKey = '') {
+  const machineID = await getMachineID();
+  machineIdInput.value = machineID;
+  licenseKeyInput.value = existingKey; // 回显已激活的卡密
+
+  // 如果已有卡密，显示"进入系统"按钮
+  if (existingKey) {
+    btnEnter.classList.remove('hidden');
+  } else {
+    btnEnter.classList.add('hidden');
+  }
+
+  licensePanel.classList.remove('hidden');
+  mainContainer.classList.add('hidden');
+}
+
+// 隐藏激活界面，显示主界面
+function hideLicensePanel() {
+  licensePanel.classList.add('hidden');
+  mainContainer.classList.remove('hidden');
+}
+
+// 更新主界面授权信息
+function updateLicenseInfo(status) {
+  if (status.licensed) {
+    infoKey.textContent = status.key_masked || status.key || '-';
+    infoMachine.textContent = status.machine_id || '-';
+    infoExpire.textContent = status.expire_at ? new Date(status.expire_at).toLocaleDateString() : '-';
+  } else {
+    infoKey.textContent = '-';
+    infoMachine.textContent = '-';
+    infoExpire.textContent = '-';
+  }
+}
+
+// 激活
+async function activate() {
+  const key = licenseKeyInput.value.trim();
+  if (!key) {
+    showLicenseMsg('请输入卡密', 'error');
+    return;
+  }
+
+  btnActivate.disabled = true;
+  showLicenseMsg('激活中...', '');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/license/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const text = await res.text();
+    console.log('激活响应:', text);
+    const data = JSON.parse(text);
+
+    if (data.success) {
+      showLicenseMsg('激活成功！正在进入...', 'success');
+      setTimeout(() => {
+        hideLicensePanel();
+        updateLicenseInfo(data.data); // 更新授权信息
+        loadAccounts(); // 加载主界面数据
+      }, 1000);
+    } else {
+      showLicenseMsg(data.message || '激活失败', 'error');
+    }
+  } catch (e) {
+    showLicenseMsg('激活失败: ' + e.message, 'error');
+  } finally {
+    btnActivate.disabled = false;
+  }
+}
+
+// 显示激活消息
+function showLicenseMsg(msg, type) {
+  licenseMsg.textContent = msg;
+  licenseMsg.className = 'license-msg ' + type;
+}
+
+// 绑定激活按钮事件
+btnActivate.onclick = activate;
+btnEnter.onclick = enterMain;
+
+// 初始化：始终显示激活界面
+async function initLicense() {
+  const status = await checkLicense();
+  // 始终显示激活界面，已激活时回显卡密
+  await showLicensePanel(status.licensed ? status.key : '');
+}
+
+// 进入主界面（跳过激活界面）
+async function enterMain() {
+  const status = await checkLicense();
+  if (status.licensed) {
+    hideLicensePanel();
+    updateLicenseInfo(status);
+    loadAccounts();
+    loadLogs();
+  } else {
+    showLicenseMsg('请先激活软件', 'error');
+  }
+}
+
 // init
-loadAccounts();
-loadLogs();
+initLicense();
 toggleProxyFields();

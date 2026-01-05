@@ -38,6 +38,8 @@ func setupRoutes(appServer *AppServer) *gin.Engine {
 	// API 路由组
 	api := router.Group("/api/v1")
 	{
+		// 授权相关接口（无需授权验证）
+		appServer.registerLicenseRoutes(api)
 		api.POST("/login/start", appServer.startLoginHandler)
 		api.GET("/login/status", appServer.checkLoginStatusHandler)
 		api.GET("/login/qrcode", appServer.getLoginQrcodeHandler)
