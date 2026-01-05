@@ -170,26 +170,37 @@ func New(cfg Config) (*Browser, error) {
 	}()
 
 	for attempt := 1; attempt <= 2; attempt++ {
+		logrus.Infof("browser launch: ===== Attempt %d START =====", attempt)
+
 		// ✅ 为每次重试创建独立的 context
 		retryCtx, retryCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer retryCancel() // ✅ 立即取消，不等待函数结束
+		logrus.Infof("browser launch: created retry context with 30s timeout")
 
 		// 使用新的 context 创建 launcher
 		l = makeLauncherWithContext(retryCtx)
+		logrus.Infof("browser launch: created launcher")
 		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q (attempt %d)", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome, attempt)
 		logrus.Infof("browser launch args: %s", strings.Join(l.FormatArgs(), " "))
 
 		// 启动前强制清理锁文件
 		if cfg.UserDataDir != "" {
+			logrus.Infof("browser launch: cleaning locks before launch")
 			cleanupUserDataLocks(cfg.UserDataDir)
+			logrus.Infof("browser launch: lock cleanup completed")
 		}
 
 		if attempt > 1 {
 			logrus.Info("browser launch: retrying after previous failure")
 		}
-		logrus.Infof("browser launch: starting Chromium process (attempt %d)", attempt)
+		logrus.Infof("browser launch: about to call l.Launch()...")
+		logrus.Infof("browser launch: ===== Attempt %d EXECUTING LAUNCH =====", attempt)
 
+		startTime := time.Now()
 		controlURL, err = l.Launch()
+		duration := time.Since(startTime)
+
+		logrus.Infof("browser launch: ===== Attempt %d LAUNCH RETURNED (duration: %v) =====", attempt, duration)
 
 		// ✅ 立即取消 context
 		retryCancel()
@@ -197,12 +208,14 @@ func New(cfg Config) (*Browser, error) {
 		// 检查结果
 		if err != nil {
 			logrus.Errorf("browser launch failed (attempt %d): %v", attempt, err)
+			logrus.Errorf("browser launch: error type: %T", err)
 			// 记录 context 错误详情
 			if retryCtx.Err() != nil {
 				logrus.Errorf("browser launch: context error on attempt %d: %v", attempt, retryCtx.Err())
 			}
 		} else {
-			logrus.Infof("browser launch: success, control url=%s", controlURL)
+			logrus.Infof("browser launch: SUCCESS! control url=%s", controlURL)
+			logrus.Infof("browser launch: ===== Attempt %d COMPLETED SUCCESSFULLY =====", attempt)
 			break
 		}
 
@@ -211,6 +224,7 @@ func New(cfg Config) (*Browser, error) {
 			logrus.Infof("browser launch: waiting 500ms before retry...")
 			time.Sleep(500 * time.Millisecond)
 		}
+		logrus.Infof("browser launch: ===== Attempt %d END =====", attempt)
 	}
 	if err != nil {
 		logrus.Errorf("browser launch: all attempts failed, final error: %v", err)
