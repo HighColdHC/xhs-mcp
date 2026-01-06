@@ -43,34 +43,46 @@ jobs:
         run: |
           cd desktop
           npm install
+          # 安装 Playwright 用于下载 Chromium
+          npm install --save-dev @playwright/chromium
 
       - name: Download Chromium for macOS
         run: |
           cd desktop
+          # 使用 Playwright 下载 Chromium
+          npx playwright install chromium
+
+          # 创建 vendor 目录
           mkdir -p vendor/chromium/chrome-mac
-          # 使用 Hugo.Giraudel 的 Chromium 下载服务（更可靠）
-          CHROMIUM_REVISION=1345455
-          echo "Downloading Chromium revision: $CHROMIUM_REVISION"
-          curl -L -o chromium.zip "https://www.chromium.org/getChrome" || \
-          curl -L -o chromium.zip "https://download-chromium.appspot.com/dl/Mac/chrome-mac.zip" || \
-          curl -L -o chromium.zip "https://storage.googleapis.com/chromium-browser-snapshots/Mac/$CHROMIUM_REVISION/chrome-mac.zip"
 
-          # 检查下载的文件是否是有效的 zip
-          file chromium.zip
+          # 查找并复制 Playwright 下载的 Chromium
+          PLAYWRIGHT_CHROMIUM=$(find ~/Library/Caches/ms-playwright -name "chrome-*.zip" -o -name "chromium-*" -type d 2>/dev/null | head -1)
 
-          # 解压
-          unzip -q chromium.zip
+          if [ -n "$PLAYWRIGHT_CHROMIUM" ] && [ -d "$PLAYWRIGHT_CHROMIUM" ]; then
+            echo "Found Playwright Chromium at: $PLAYWRIGHT_CHROMIUM"
+            # 复制 Chromium 到 vendor 目录
+            if [ -f "$PLAYWRIGHT_CHROMIUM/chrome-mac" ]; then
+              cp -R "$PLAYWRIGHT_CHROMIUM/chrome-mac"/* vendor/chromium/chrome-mac/
+            elif [ -d "$PLAYWRIGHT_CHROMIUM" ]; then
+              cp -R "$PLAYWRIGHT_CHROMIUM"/* vendor/chromium/chrome-mac/ 2>/dev/null || true
+            fi
+          else
+            echo "Playwright Chromium not found in cache, downloading directly..."
+            # 备用方案：直接从 Playwright GitHub 下载
+            CHROMIUM_VERSION=$(curl -s https://playwright.azureedge.net/builds/chromium | grep -o 'href="[^"]*"' | head -1 | sed 's/href="//;s/".*//' || echo "1345455")
+            curl -L -o chromium.zip "https://playwright.azureedge.net/builds/chromium/${CHROMIUM_VERSION}/mac-mac.zip" || \
+            curl -L -o chromium.zip "https://storage.googleapis.com/chromium-browser-snapshots/Mac/$CHROMIUM_VERSION/chrome-mac.zip"
 
-          # 处理可能的目录结构
-          if [ -d "chrome-mac" ]; then
-            mv chrome-mac/* vendor/chromium/chrome-mac/
-            rm -rf chrome-mac
-          elif [ -d "Chromium.app" ]; then
-            mkdir -p vendor/chromium/chrome-mac
-            mv Chromium.app vendor/chromium/chrome-mac/
+            unzip -q chromium.zip
+            if [ -d "chrome-mac" ]; then
+              mv chrome-mac/* vendor/chromium/chrome-mac/
+              rm -rf chrome-mac
+            elif [ -d "Chromium.app" ]; then
+              mv Chromium.app vendor/chromium/chrome-mac/
+            fi
+            rm -f chromium.zip
           fi
 
-          rm -f chromium.zip
           ls -la vendor/chromium/chrome-mac/
 
       - name: Build Electron app
