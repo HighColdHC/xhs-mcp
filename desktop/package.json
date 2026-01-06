@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win portable"
+    "build": "electron-builder --win portable",
+    "build:mac": "electron-builder --mac"
   },
   "devDependencies": {
     "electron": "^29.0.0",
@@ -28,16 +29,20 @@
     ],
     "extraResources": [
       {
-        "from": "../backend/xhs-mcp.exe",
-        "to": "backend/xhs-mcp.exe"
+        "from": "vendor/backend/xhs-mcp",
+        "to": "backend/xhs-mcp"
       },
       {
-        "from": "vendor/chromium/chrome-win64",
-        "to": "chromium/chrome-win64"
+        "from": "vendor/chromium",
+        "to": "chromium"
       }
     ],
     "win": {
       "target": "portable"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
     }
   }
 }
