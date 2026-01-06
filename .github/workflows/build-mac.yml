@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - fix/startup-stability
     tags:
       - 'v*'
   pull_request:
