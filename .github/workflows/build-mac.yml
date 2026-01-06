@@ -44,7 +44,7 @@ jobs:
           cd desktop
           npm install
           # 安装 Playwright 用于下载 Chromium
-          npm install --save-dev @playwright/chromium
+          npm install --save-dev playwright
 
       - name: Download Chromium for macOS
         run: |
