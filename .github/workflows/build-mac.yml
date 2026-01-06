@@ -29,17 +29,24 @@ jobs:
           cd desktop
           npm install
 
-      - name: Install Playwright and download Chromium
+      - name: Download Chromium using Playwright
         run: |
           cd desktop
           npx playwright install chromium
           mkdir -p vendor/chromium
-          cp -r ~/Library/Caches/ms-playwright/chromium-*/chrome-win64 vendor/chromium/
+          # macOS Chromium path from Playwright cache
+          PLAYWRIGHT_CHROMIUM_PATH=$(find ~/Library/Caches/ms-playwright -type d -name "chrome-*" | head -1)
+          if [ -d "$PLAYWRIGHT_CHROMIUM_PATH" ]; then
+            cp -r "$PLAYWRIGHT_CHROMIUM_PATH"/* vendor/chromium/
+          else
+            echo "Chromium not found in cache"
+            exit 1
+          fi
 
       - name: Build backend
         run: |
           cd backend
-          go build -o ../desktop/vendor/backend/xhs-mcp .
+          GOOS=darwin GOARCH=amd64 go build -o ../desktop/vendor/backend/xhs-mcp .
 
       - name: Build Electron app for macOS
         run: |
