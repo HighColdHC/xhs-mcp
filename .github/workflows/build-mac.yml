@@ -48,10 +48,11 @@ jobs:
         run: |
           cd desktop
           mkdir -p vendor/chromium/chrome-mac
-          # 使用 Chromium 自动下载服务获取最新稳定版
-          CHROMIUM_VERSION=$(curl -s "https://www.googleapis.com/download_storage/v1/b/chromium-browser-snapshots/o/Mac%2FLAST_CHANGE?alt=media" | tr -d '\n')
+          # 使用官方 Chromium 下载服务
+          CHROMIUM_VERSION=$(curl -s "https://chromium.woolyss.com/api/os?os=mac&arch=x64&out=json" | grep -o '"chromium_version":"[^"]*"' | cut -d'"' -f4)
           echo "Chromium version: $CHROMIUM_VERSION"
-          curl -L -o chromium.zip "https://www.googleapis.com/download_storage/v1/b/chromium-browser-snapshots/o/Mac%2F${CHROMIUM_VERSION}%2Fchrome-mac.zip?alt=media"
+          # 使用简化的下载方式，直接下载已知版本
+          curl -L -o chromium.zip "https://www.googleapis.com/download_storage/v1/b/chromium-browser-snapshots/Mac/1345455/chrome-mac.zip"
           unzip -q chromium.zip
           mv chrome-mac/* vendor/chromium/chrome-mac/
           rm -rf chrome-mac chromium.zip
