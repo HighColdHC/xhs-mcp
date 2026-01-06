@@ -260,20 +260,21 @@ try {
     if (lang) Object.defineProperty(navigator, 'language', { get: () => lang });
     Object.defineProperty(navigator, 'platform', { get: () => platform });
   }
-  if (typeof Intl !== 'undefined' && Intl.DateTimeFormat && Intl.DateTimeFormat.prototype) {
-    const orig = Intl.DateTimeFormat.prototype.resolvedOptions;
-    Intl.DateTimeFormat.prototype.resolvedOptions = function(...args) {
-      let o = {};
-      try {
-        if (orig && typeof orig === 'function') {
-          o = orig.apply(this, args) || {};
-        }
-      } catch (e) {
-        // 如果原方法调用失败，使用空对象
-      }
-      return Object.assign({}, o, { timeZone: tz });
-    };
-  }
+  // Skip Intl.DateTimeFormat modification due to stealth.js conflicts
+  // if (typeof Intl !== 'undefined' && Intl.DateTimeFormat && Intl.DateTimeFormat.prototype) {
+  //   const orig = Intl.DateTimeFormat.prototype.resolvedOptions;
+  //   Intl.DateTimeFormat.prototype.resolvedOptions = function(...args) {
+  //     let o = {};
+  //     try {
+  //       if (orig && typeof orig === 'function' && typeof orig.apply === 'function') {
+  //         o = orig.apply(this, args) || {};
+  //       }
+  //     } catch (e) {
+  //       // 如果原方法调用失败，使用空对象
+  //     }
+  //     return Object.assign({}, o, { timeZone: tz });
+  //   };
+  // }
   if (typeof window !== 'undefined') {
     Object.defineProperty(window, 'devicePixelRatio', { get: () => dpr });
     Object.defineProperty(window, 'outerWidth', { get: () => sw });

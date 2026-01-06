@@ -56,7 +56,7 @@ function copyFileIfNeeded(src, dest) {
     try {
       const srcStat = fs.statSync(src);
       const destStat = fs.statSync(dest);
-      if (srcStat.size !== destStat.size) {
+      if (srcStat.mtimeMs !== destStat.mtimeMs) {
         shouldCopy = true;
       }
     } catch (_err) {

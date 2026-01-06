@@ -1,6 +1,6 @@
 {
   "name": "xhs-mcp-desktop",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "Desktop shell for xiaohongshu-mcp (Electron)",
   "main": "main.js",
   "scripts": {
@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "com.xhs.mcp.desktop",
-    "productName": "XHS MCP Desktop Fix29",
+    "productName": "XHS MCP Desktop v2.0",
     "directories": {
       "output": "dist"
     },
@@ -28,7 +28,7 @@
     ],
     "extraResources": [
       {
-        "from": "../backend/xhs-mcp-sched-fix29.exe",
+        "from": "../backend/xhs-mcp.exe",
         "to": "backend/xhs-mcp.exe"
       },
       {
