@@ -48,14 +48,29 @@ jobs:
         run: |
           cd desktop
           mkdir -p vendor/chromium/chrome-mac
-          # 使用官方 Chromium 下载服务
-          CHROMIUM_VERSION=$(curl -s "https://chromium.woolyss.com/api/os?os=mac&arch=x64&out=json" | grep -o '"chromium_version":"[^"]*"' | cut -d'"' -f4)
-          echo "Chromium version: $CHROMIUM_VERSION"
-          # 使用简化的下载方式，直接下载已知版本
-          curl -L -o chromium.zip "https://www.googleapis.com/download_storage/v1/b/chromium-browser-snapshots/Mac/1345455/chrome-mac.zip"
+          # 使用 Hugo.Giraudel 的 Chromium 下载服务（更可靠）
+          CHROMIUM_REVISION=1345455
+          echo "Downloading Chromium revision: $CHROMIUM_REVISION"
+          curl -L -o chromium.zip "https://www.chromium.org/getChrome" || \
+          curl -L -o chromium.zip "https://download-chromium.appspot.com/dl/Mac/chrome-mac.zip" || \
+          curl -L -o chromium.zip "https://storage.googleapis.com/chromium-browser-snapshots/Mac/$CHROMIUM_REVISION/chrome-mac.zip"
+
+          # 检查下载的文件是否是有效的 zip
+          file chromium.zip
+
+          # 解压
           unzip -q chromium.zip
-          mv chrome-mac/* vendor/chromium/chrome-mac/
-          rm -rf chrome-mac chromium.zip
+
+          # 处理可能的目录结构
+          if [ -d "chrome-mac" ]; then
+            mv chrome-mac/* vendor/chromium/chrome-mac/
+            rm -rf chrome-mac
+          elif [ -d "Chromium.app" ]; then
+            mkdir -p vendor/chromium/chrome-mac
+            mv Chromium.app vendor/chromium/chrome-mac/
+          fi
+
+          rm -f chromium.zip
           ls -la vendor/chromium/chrome-mac/
 
       - name: Build Electron app
