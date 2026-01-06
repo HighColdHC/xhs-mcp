@@ -36,6 +36,15 @@
       {
         "from": "vendor/chromium/chrome-win64",
         "to": "chromium/chrome-win64"
+      },
+      {
+        "from": "../backend/xhs-mcp",
+        "to": "backend/xhs-mcp",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "vendor/chromium/chrome-mac",
+        "to": "chromium/chrome-mac"
       }
     ],
     "win": {

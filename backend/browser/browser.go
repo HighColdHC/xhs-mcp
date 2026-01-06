@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -58,18 +56,9 @@ func New(cfg Config) (*Browser, error) {
 		ctx = context.Background()
 	}
 
-	// 基础上下文超时设置（如果没有设置）
-	var baseCancel context.CancelFunc
-	if _, hasTimeout := ctx.Deadline(); !hasTimeout {
-		ctx, baseCancel = context.WithTimeout(ctx, 30*time.Second)
-		logrus.Infof("browser launch: using default 30s timeout")
-	} else {
-		logrus.Infof("browser launch: using custom context timeout")
-	}
-	// 延迟取消基础 context（在整个函数结束时）
-	if baseCancel != nil {
-		defer baseCancel()
-	}
+	// 基础上下文设置 - 不在这里设置超时，让每次重试独立控制
+	// 避免外层超时削减内层重试的超时时间
+	logrus.Infof("browser launch: using attempt-level timeout control")
 
 	if cfg.UserDataDir != "" {
 		if err := os.MkdirAll(cfg.UserDataDir, 0o755); err != nil {
@@ -105,13 +94,23 @@ func New(cfg Config) (*Browser, error) {
 
 	// 创建带特定 context 的 launcher 的辅助函数
 	makeLauncherWithContext := func(launchCtx context.Context) *launcher.Launcher {
+		// 🔥 修复 Windows 启动卡死问题：
+		// Rod 在 headless=false 时会自动添加 --no-startup-window
+		// 这会导致 Chrome 在 Windows 上启动卡死。
+		// 解决方案：使用 headless=true 但添加参数强制显示窗口。
+		// 🔥 修复 Leakless 辅助进程被杀软拦截问题：关闭 Leakless 模式
 		l := launcher.New().Context(launchCtx).
-			Headless(cfg.Headless).
-			Leakless(true).
+			Leakless(false).  // Windows 下 Leakless 辅助进程可能被杀软拦截，导致 Chrome 永远无法启动
 			Set(flags.NoSandbox).
 			Set(flags.Flag("no-first-run")).
 			Set(flags.Flag("no-default-browser-check")).
 			Logger(os.Stdout)
+
+		// 设置 headless 模式（直接使用用户配置，不再尝试绕过 --no-startup-window）
+		l = l.Headless(cfg.Headless)
+		if !cfg.Headless {
+			logrus.Info("browser launch: headless=false mode (visible window)")
+		}
 
 		if chromeVerbose {
 			l = l.Set(flags.Flag("enable-logging"), "stderr").
@@ -172,13 +171,13 @@ func New(cfg Config) (*Browser, error) {
 	for attempt := 1; attempt <= 2; attempt++ {
 		logrus.Infof("browser launch: ===== Attempt %d START =====", attempt)
 
-		// ✅ 为每次重试创建独立的 context
-		retryCtx, retryCancel := context.WithTimeout(ctx, 30*time.Second)
-		defer retryCancel() // ✅ 立即取消，不等待函数结束
-		logrus.Infof("browser launch: created retry context with 30s timeout")
+		// ✅ 为每次重试创建独立的 context（独立30秒，不受外层影响）
+		// 使用独立的background context避免外层超时削减
+		attemptCtx, attemptCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		logrus.Infof("browser launch: created independent attempt context with 30s timeout")
 
 		// 使用新的 context 创建 launcher
-		l = makeLauncherWithContext(retryCtx)
+		l = makeLauncherWithContext(attemptCtx)
 		logrus.Infof("browser launch: created launcher")
 		logrus.Infof("browser launch: headless=%t bin=%q userData=%q proxy=%q (attempt %d)", cfg.Headless, cfg.BinPath, cfg.UserDataDir, proxyForChrome, attempt)
 		logrus.Infof("browser launch args: %s", strings.Join(l.FormatArgs(), " "))
@@ -203,15 +202,19 @@ func New(cfg Config) (*Browser, error) {
 		logrus.Infof("browser launch: ===== Attempt %d LAUNCH RETURNED (duration: %v) =====", attempt, duration)
 
 		// ✅ 立即取消 context
-		retryCancel()
+		attemptCancel()
 
 		// 检查结果
 		if err != nil {
 			logrus.Errorf("browser launch failed (attempt %d): %v", attempt, err)
 			logrus.Errorf("browser launch: error type: %T", err)
 			// 记录 context 错误详情
-			if retryCtx.Err() != nil {
-				logrus.Errorf("browser launch: context error on attempt %d: %v", attempt, retryCtx.Err())
+			if attemptCtx.Err() != nil {
+				logrus.Errorf("browser launch: context error on attempt %d: %v", attempt, attemptCtx.Err())
+			}
+			// 检查是否是超时错误
+			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
+				logrus.Errorf("browser launch: timeout error detected")
 			}
 		} else {
 			logrus.Infof("browser launch: SUCCESS! control url=%s", controlURL)
@@ -263,8 +266,8 @@ func New(cfg Config) (*Browser, error) {
 	// 后续由 Browser.Close() 负责清理 launcher
 	cleanupNeeded = false
 
-	// 尝试获取 Chrome 进程 PID（用于后续强制清理）
-	pid := getChromePID(cfg.BinPath)
+	// 🔥 修复：不再获取和保存 PID，避免误杀用户的 Chrome 浏览器
+	// b.launcher.Kill() 已经能正确清理
 
 	return &Browser{
 		browser:  rb,
@@ -272,46 +275,11 @@ func New(cfg Config) (*Browser, error) {
 		fp:       cfg.Fingerprint,
 		bridge:   bridgeStop,
 		cleanup:  cfg.UserDataDir == "",
-		pid:      pid,
+		pid:      0,  // 不再使用
 	}, nil
 }
 
-// getChromePID 尝试获取 Chrome 进程的 PID
-func getChromePID(binPath string) int {
-	if binPath == "" {
-		return 0
-	}
-
-	// Windows 下使用 tasklist 获取 Chrome 进程 PID
-	if runtime.GOOS == "windows" {
-		cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq chrome.exe", "/FO", "CSV")
-		output, err := cmd.Output()
-		if err != nil {
-			return 0
-		}
-
-		lines := strings.Split(string(output), "\n")
-		if len(lines) > 1 {
-			// 跳过标题行，取第一个 Chrome 进程
-			for _, line := range lines[1:] {
-				if line == "" {
-					continue
-				}
-				// CSV 格式: "chrome.exe","12345","Console","1","150,000 K"
-				parts := strings.Split(line, ",")
-				if len(parts) > 1 {
-					pidStr := strings.Trim(parts[1], "\"")
-					var pid int
-					if _, err := fmt.Sscanf(pidStr, "%d", &pid); err == nil {
-						return pid
-					}
-				}
-			}
-		}
-	}
-
-	return 0
-}
+// 🔥 删除 getChromePID 函数 - 不再使用，会误杀用户的 Chrome 浏览器
 
 func envEnabled(name string) bool {
 	v := strings.TrimSpace(os.Getenv(name))
@@ -370,21 +338,13 @@ func (b *Browser) Close() {
 		}
 	}
 
-	// 强制清理残留的 Chrome 进程（Windows）
-	if b.pid > 0 && runtime.GOOS == "windows" {
-		forceKillChrome(b.pid)
-	}
+	// 🔥 修复：删除强制清理代码
+	// b.launcher.Kill() 已经能正确清理 Chrome 进程
+	// 旧的 getChromePID() 会误杀用户自己的 Chrome 浏览器
+	// 不再需要额外的强制清理
 }
 
-// forceKillChrome 强制杀死 Chrome 进程及其子进程
-func forceKillChrome(pid int) {
-	cmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", pid))
-	if err := cmd.Run(); err != nil {
-		logrus.Debugf("forceKillChrome: failed to kill PID %d: %v", pid, err)
-	} else {
-		logrus.Infof("forceKillChrome: killed Chrome process PID %d", pid)
-	}
-}
+// 🔥 删除 forceKillChrome 函数 - 不再使用，会误杀用户的 Chrome 浏览器
 
 // NewPage opens a new stealth page.
 func (b *Browser) NewPage() *rod.Page {

@@ -1,0 +1,79 @@
+name: Build macOS App
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build backend
+        run: |
+          cd backend
+          go build -o xhs-mcp
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd desktop
+          npm install
+
+      - name: Download Chromium for macOS
+        run: |
+          cd desktop
+          mkdir -p vendor/chromium/chrome-mac
+          # 使用 Chromium 自动下载服务获取最新稳定版
+          CHROMIUM_VERSION=$(curl -s "https://www.googleapis.com/download_storage/v1/b/chromium-browser-snapshots/o/Mac%2FLAST_CHANGE?alt=media" | tr -d '\n')
+          echo "Chromium version: $CHROMIUM_VERSION"
+          curl -L -o chromium.zip "https://www.googleapis.com/download_storage/v1/b/chromium-browser-snapshots/o/Mac%2F${CHROMIUM_VERSION}%2Fchrome-mac.zip?alt=media"
+          unzip -q chromium.zip
+          mv chrome-mac/* vendor/chromium/chrome-mac/
+          rm -rf chrome-mac chromium.zip
+          ls -la vendor/chromium/chrome-mac/
+
+      - name: Build Electron app
+        run: |
+          cd desktop
+          npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: XHS-MCP-Desktop-macOS
+          path: desktop/dist/*.dmg
+          retention-days: 30
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: desktop/dist/*.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

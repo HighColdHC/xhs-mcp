@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(go build:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

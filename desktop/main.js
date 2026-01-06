@@ -50,21 +50,33 @@ function copyFileIfNeeded(src, dest) {
   const destDir = path.dirname(dest);
   ensureDir(destDir);
   let shouldCopy = false;
+  let reason = '';
+
   if (!fs.existsSync(dest)) {
     shouldCopy = true;
+    reason = 'dest not exists';
   } else {
     try {
       const srcStat = fs.statSync(src);
       const destStat = fs.statSync(dest);
-      if (srcStat.size !== destStat.size) {
+      // 🔥 强制覆盖策略：只要时间戳不一致就覆盖
+      if (srcStat.mtimeMs !== destStat.mtimeMs) {
         shouldCopy = true;
+        reason = `timestamps differ (src=${srcStat.mtimeMs}, dest=${destStat.mtimeMs})`;
+      } else {
+        reason = `timestamps identical (${srcStat.mtimeMs})`;
       }
     } catch (_err) {
       shouldCopy = true;
+      reason = 'stat error';
     }
   }
+
   if (shouldCopy) {
+    appendLog(`[COPY] ${path.basename(src)} -> ${path.basename(dest)} (${reason})`);
     fs.copyFileSync(src, dest);
+  } else {
+    appendLog(`[SKIP] ${path.basename(src)} already up-to-date (${reason})`);
   }
 }
 
@@ -77,11 +89,20 @@ function copyDirIfMissing(srcDir, destDir) {
 }
 
 function resolveDevBackendPath() {
-  return path.resolve(__dirname, '..', 'backend', 'xhs-mcp-sched-fix30.exe');
+  // 🔥 跨平台支持：Windows 用 .exe，macOS/Linux 用无扩展名
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  return path.resolve(__dirname, '..', 'backend', `xhs-mcp${ext}`);
 }
 
 function resolveDevChromiumDir() {
-  return path.resolve(__dirname, 'vendor', 'chromium', 'chrome-win64');
+  // 🔥 跨平台支持：Windows 用 chrome-win64，macOS 用 chrome-mac，Linux 用 chrome-linux
+  if (process.platform === 'win32') {
+    return path.resolve(__dirname, 'vendor', 'chromium', 'chrome-win64');
+  } else if (process.platform === 'darwin') {
+    return path.resolve(__dirname, 'vendor', 'chromium', 'chrome-mac');
+  } else {
+    return path.resolve(__dirname, 'vendor', 'chromium', 'chrome-linux');
+  }
 }
 
 function resolveResources() {
@@ -91,19 +112,26 @@ function resolveResources() {
   ensureDir(path.join(dataDir, 'profiles'));
   ensureDir(path.join(dataDir, 'cookies'));
 
+  // 🔥 跨平台支持：根据平台选择正确的后端和 Chromium
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+  const backendExt = isWin ? '.exe' : '';
+  const chromiumDir = isWin ? 'chrome-win64' : (isMac ? 'chrome-mac' : 'chrome-linux');
+  const chromeExeName = isWin ? 'chrome.exe' : 'Chromium';  // macOS/Linux 可执行文件名
+
   let backendSrc = '';
   let chromiumSrcDir = '';
   if (app.isPackaged) {
-    backendSrc = path.join(process.resourcesPath, 'backend', 'xhs-mcp.exe');
-    chromiumSrcDir = path.join(process.resourcesPath, 'chromium', 'chrome-win64');
+    backendSrc = path.join(process.resourcesPath, 'backend', `xhs-mcp${backendExt}`);
+    chromiumSrcDir = path.join(process.resourcesPath, 'chromium', chromiumDir);
   } else {
     backendSrc = resolveDevBackendPath();
     chromiumSrcDir = resolveDevChromiumDir();
   }
 
-  const backendDest = path.join(dataDir, 'backend', 'xhs-mcp.exe');
-  const chromiumDestDir = path.join(baseDir, 'chromium', 'chrome-win64');
-  const chromiumExe = path.join(chromiumDestDir, 'chrome.exe');
+  const backendDest = path.join(dataDir, 'backend', `xhs-mcp${backendExt}`);
+  const chromiumDestDir = path.join(baseDir, 'chromium', chromiumDir);
+  const chromiumExe = path.join(chromiumDestDir, chromeExeName);
 
   if (backendSrc && fs.existsSync(backendSrc)) {
     try {
@@ -142,24 +170,51 @@ function startBackend() {
     return;
   }
 
-  // 检查是否有旧的后端进程在运行
+  // 🔥 跨平台支持：检查并清理旧的后端进程
   const { exec } = require('child_process');
-  exec('tasklist | findstr "xhs-mcp.exe"', (err, stdout) => {
-    if (stdout && stdout.includes('xhs-mcp.exe')) {
-      appendLog('[DESKTOP] detected existing backend process, cleaning up...');
-      exec('taskkill /F /IM xhs-mcp.exe', (killErr) => {
-        if (killErr) {
-          appendLog(`[DESKTOP] cleanup failed: ${killErr.message}`);
-        } else {
-          appendLog('[DESKTOP] old backend process killed');
-          // 等待 1 秒后启动新进程
-          setTimeout(() => doStartBackend(backendPath, chromePath), 1000);
-        }
-      });
-    } else {
-      doStartBackend(backendPath, chromePath);
-    }
-  });
+  const backendName = path.basename(backendPath);
+
+  if (process.platform === 'win32') {
+    // Windows 使用 tasklist/taskkill
+    exec(`tasklist | findstr "${backendName}"`, (err, stdout) => {
+      if (stdout && stdout.includes(backendName)) {
+        appendLog('[DESKTOP] detected existing backend process, cleaning up...');
+        const killCmd = `taskkill /F /IM ${backendName}`;
+        exec(killCmd, (killErr) => {
+          if (killErr) {
+            appendLog(`[DESKTOP] cleanup failed: ${killErr.message}`);
+          } else {
+            appendLog('[DESKTOP] old backend process killed');
+            setTimeout(() => doStartBackend(backendPath, chromePath), 1000);
+          }
+        });
+      } else {
+        doStartBackend(backendPath, chromePath);
+      }
+    });
+  } else if (process.platform === 'darwin' || process.platform === 'linux') {
+    // macOS/Linux 使用 pgrep/pkill
+    exec(`pgrep -f "${backendName}"`, (err, stdout) => {
+      if (stdout && stdout.trim()) {
+        appendLog('[DESKTOP] detected existing backend process, cleaning up...');
+        const killCmd = `pkill -9 -f "${backendName}"`;
+        exec(killCmd, (killErr) => {
+          if (killErr) {
+            appendLog(`[DESKTOP] cleanup failed: ${killErr.message}`);
+            doStartBackend(backendPath, chromePath);
+          } else {
+            appendLog('[DESKTOP] old backend process killed');
+            setTimeout(() => doStartBackend(backendPath, chromePath), 1000);
+          }
+        });
+      } else {
+        doStartBackend(backendPath, chromePath);
+      }
+    });
+  } else {
+    // 其他平台直接启动
+    doStartBackend(backendPath, chromePath);
+  }
 }
 
 function doStartBackend(backendPath, chromePath) {
