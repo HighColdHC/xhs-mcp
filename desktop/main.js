@@ -143,7 +143,7 @@ function resolveResources() {
     appendLog('[DESKTOP] backend source not found');
   }
 
-  if (chromiumSrcDir && fs.existsSync(path.join(chromiumSrcDir, 'chrome.exe'))) {
+  if (chromiumSrcDir && fs.existsSync(chromiumExe)) {
     try {
       copyDirIfMissing(chromiumSrcDir, chromiumDestDir);
     } catch (err) {
