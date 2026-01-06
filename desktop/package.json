@@ -24,7 +24,6 @@
       "renderer/**/*",
       "icon_16.png",
       "icon_32.png",
-      "icon.png",
       "package.json"
     ],
     "extraResources": [
