@@ -38,10 +38,20 @@ jobs:
           PLAYWRIGHT_CHROMIUM_PATH=$(find ~/Library/Caches/ms-playwright -type d -name "chrome-*" | head -1)
           if [ -d "$PLAYWRIGHT_CHROMIUM_PATH" ]; then
             cp -r "$PLAYWRIGHT_CHROMIUM_PATH"/* vendor/chromium/
+            echo "Chromium copied successfully"
+            ls -la vendor/chromium/
           else
             echo "Chromium not found in cache"
             exit 1
           fi
+
+      - name: Verify vendor structure
+        run: |
+          cd desktop
+          echo "Checking vendor structure..."
+          ls -la vendor/ || echo "vendor dir not found"
+          ls -la vendor/backend/ || echo "backend dir not found"
+          ls -la vendor/chromium/ || echo "chromium dir not found"
 
       - name: Build backend
         run: |
@@ -51,7 +61,10 @@ jobs:
       - name: Build Electron app for macOS
         run: |
           cd desktop
+          # Temporarily remove icon.png to avoid macOS size requirement issues
+          mv icon.png icon.png.bak 2>/dev/null || true
           npm run build -- --mac
+          mv icon.png.bak icon.png 2>/dev/null || true
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
