@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -87,24 +88,44 @@ func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, 
 	// 使用retry-go处理页面导航和DOM稳定等待
 	err := retry.Do(
 		func() error {
-			page.MustNavigate(url)
-			page.MustWaitDOMStable()
+			// 使用 Navigate 替代 MustNavigate，返回错误而非 panic
+			if err := page.Navigate(url); err != nil {
+				return fmt.Errorf("navigate failed: %w", err)
+			}
+
+			// 等待页面稳定
+			if err := page.WaitDOMStable(5*time.Second, 0.5); err != nil {
+				return fmt.Errorf("DOM stable timeout: %w", err)
+			}
+
 			return nil
 		},
 		retry.Attempts(3),
 		retry.Delay(500*time.Millisecond),
 		retry.MaxJitter(1000*time.Millisecond),
 		retry.OnRetry(func(n uint, err error) {
-			logrus.Debugf("页面导航重试 #%d: %v", n, err)
+			logrus.Warnf("页面导航重试 #%d/%d: %v", n+1, 3, err)
 		}),
 	)
 	if err != nil {
-		logrus.Errorf("页面导航失败: %v", err)
+		logrus.Errorf("页面导航失败（已重试3次）: %v", err)
 		return nil, err
 	}
 	sleepRandom(1000, 1000)
 
 	if err := checkPageAccessible(page); err != nil {
+		// 获取当前页面状态用于调试
+		info, _ := page.Info()
+		logrus.Errorf("页面可访问性检查失败: 当前URL=%v, 错误=%v", info.URL, err)
+
+		// 尝试截图保存失败现场
+		if screenshotData, err := page.Screenshot(false, &proto.PageCaptureScreenshot{}); err == nil {
+			screenshotPath := fmt.Sprintf("debug_screenshot_%d.png", time.Now().Unix())
+			if err := os.WriteFile(screenshotPath, screenshotData, 0644); err == nil {
+				logrus.Infof("已保存失败截图: %s", screenshotPath)
+			}
+		}
+
 		return nil, err
 	}
 

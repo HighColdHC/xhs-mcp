@@ -263,7 +263,14 @@ try {
   if (typeof Intl !== 'undefined' && Intl.DateTimeFormat && Intl.DateTimeFormat.prototype) {
     const orig = Intl.DateTimeFormat.prototype.resolvedOptions;
     Intl.DateTimeFormat.prototype.resolvedOptions = function(...args) {
-      const o = orig ? orig.apply(this, args) || {} : {};
+      let o = {};
+      try {
+        if (orig && typeof orig === 'function') {
+          o = orig.apply(this, args) || {};
+        }
+      } catch (e) {
+        // 如果原方法调用失败，使用空对象
+      }
       return Object.assign({}, o, { timeZone: tz });
     };
   }
